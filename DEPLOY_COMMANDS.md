@@ -53,9 +53,10 @@ the EKS nodes' LabRole provides IAM credentials to boto3 automatically.
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
+export GEMINI_API_KEY='your-key-here'   # recommended: never commit this
 ./deploy.sh create-secrets
 ```
-Only DB credentials and Gemini API key are prompted. Email uses SES via IAM role (no secret).
+DB credentials are prompted; Gemini is taken from `GEMINI_API_KEY` or a final prompt. Email uses SES via IAM role (no SMTP secret).
 
 ## Step 8: Deploy to K8S
 

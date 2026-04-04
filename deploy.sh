@@ -81,6 +81,16 @@ create_secrets() {
     read -rsp "DB Password: " DB_PASS
     echo ""
 
+    local gemini_key="${GEMINI_API_KEY:-}"
+    if [ -z "${gemini_key}" ]; then
+        read -rsp "Gemini API key (or set GEMINI_API_KEY and re-run): " gemini_key
+        echo ""
+    fi
+    if [ -z "${gemini_key}" ]; then
+        echo "ERROR: Gemini API key is required." >&2
+        exit 1
+    fi
+
     kubectl create secret generic db-credentials \
         --namespace=bookstore-ns \
         --from-literal=host="${DB_HOST}" \
@@ -90,7 +100,7 @@ create_secrets() {
 
     kubectl create secret generic app-secrets \
         --namespace=bookstore-ns \
-        --from-literal=gemini-api-key="AIzaSyChSLwEtrns_oeyxLJYLoEEuwTvP7ylQFA" \
+        --from-literal=gemini-api-key="${gemini_key}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     echo ">>> Secrets created/updated. (No email secrets needed -- SES uses IAM role.)"
