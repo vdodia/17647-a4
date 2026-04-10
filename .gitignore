@@ -11,3 +11,4 @@ node_modules/
 mysql_data/
 .DS_Store
 *.zip
+DEPLOY_COMMANDS.md
