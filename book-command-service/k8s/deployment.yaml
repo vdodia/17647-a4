@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: customer-service
+  name: book-command-service
   namespace: bookstore-ns
   labels:
-    app: customer-service
+    app: book-command-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: customer-service
+      app: book-command-service
   template:
     metadata:
       labels:
-        app: customer-service
+        app: book-command-service
     spec:
       containers:
-        - name: customer-service
-          image: 780159647368.dkr.ecr.us-east-1.amazonaws.com/bookstore/customer-service:latest
+        - name: book-command-service
+          image: 780159647368.dkr.ecr.us-east-1.amazonaws.com/bookstore/book-command-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -40,11 +40,12 @@ spec:
                   name: db-credentials
                   key: password
             - name: MYSQL_DATABASE
-              value: customers_db
-            - name: KAFKA_BROKERS
-              value: "98.88.99.206:9092,34.195.107.7:9092,54.221.160.63:9092"
-            - name: KAFKA_TOPIC
-              value: vdodia.customer.evt
+              value: books_db
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: gemini-api-key
           livenessProbe:
             httpGet:
               path: /status

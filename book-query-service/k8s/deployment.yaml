@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: book-query-service
+  namespace: bookstore-ns
+  labels:
+    app: book-query-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: book-query-service
+  template:
+    metadata:
+      labels:
+        app: book-query-service
+    spec:
+      containers:
+        - name: book-query-service
+          image: 780159647368.dkr.ecr.us-east-1.amazonaws.com/bookstore/book-query-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-credentials
+                  key: uri
+            - name: MONGO_DATABASE
+              value: "BooksDB"
+            - name: MONGO_COLLECTION
+              value: "books_vdodia"
+            - name: RECOMMENDATION_SERVICE_URL
+              value: "http://34.195.107.7"
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

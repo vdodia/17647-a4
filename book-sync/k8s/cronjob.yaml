@@ -1,0 +1,49 @@
+# Book data sync: RDS -> Mongo every minute (N=60s per A4 spec)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: book-sync
+  namespace: bookstore-ns
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: book-sync
+              image: 780159647368.dkr.ecr.us-east-1.amazonaws.com/bookstore/book-sync:latest
+              imagePullPolicy: Always
+              env:
+                - name: DATABASE_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: host
+                - name: DATABASE_PORT
+                  value: "3306"
+                - name: MYSQL_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: username
+                - name: MYSQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: password
+                - name: MYSQL_DATABASE
+                  value: books_db
+                - name: MONGO_URI
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-credentials
+                      key: uri
+                - name: MONGO_DATABASE
+                  value: "BooksDB"
+                - name: MONGO_COLLECTION
+                  value: "books_vdodia"

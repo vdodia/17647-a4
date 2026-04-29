@@ -47,7 +47,7 @@ spec:
                   name: app-secrets
                   key: gemini-api-key
             - name: RECOMMENDATION_SERVICE_URL
-              value: "http://54.221.160.63"
+              value: "http://34.195.107.7"
           livenessProbe:
             httpGet:
               path: /status

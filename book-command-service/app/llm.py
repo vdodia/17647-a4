@@ -1,7 +1,5 @@
 """
-llm.py – Synchronous LLM call (Gemini) for book summaries.
-fetch_and_store_summary blocks until the summary is written to the DB,
-so GET /books/{ISBN} immediately after POST will always see a non-null summary.
+llm.py – Gemini summary stored in RDS books table.
 """
 import logging
 import google.generativeai as genai
@@ -11,15 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_and_store_summary(isbn: str, title: str, author: str) -> None:
-    """
-    Synchronously:
-    1. Ask Gemini for a 500-word summary.
-    2. UPDATE books SET summary = ... WHERE ISBN = isbn.
-    Errors are logged but not re-raised so a Gemini failure doesn't break POST.
-    """
     try:
         if not config.GEMINI_API_KEY:
-            logger.warning("GEMINI_API_KEY not set; skipping LLM call for ISBN=%s", isbn)
+            logger.warning("GEMINI_API_KEY not set; skipping LLM for ISBN=%s", isbn)
             return
 
         genai.configure(api_key=config.GEMINI_API_KEY)
@@ -32,6 +24,7 @@ def fetch_and_store_summary(isbn: str, title: str, author: str) -> None:
         summary = response.text
 
         from app.db import get_connection
+
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -47,5 +40,4 @@ def fetch_and_store_summary(isbn: str, title: str, author: str) -> None:
 
 
 def trigger_summary(isbn: str, title: str, author: str) -> None:
-    """Synchronous call — blocks until summary is stored in the DB."""
     fetch_and_store_summary(isbn, title, author)

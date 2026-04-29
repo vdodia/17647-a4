@@ -12,3 +12,8 @@ mysql_data/
 .DS_Store
 *.zip
 DEPLOY_COMMANDS.md
+.deploy/
+# Course handouts (keep local only)
+Assignment A1-1.pdf
+Assignment A2.pdf
+Assignment A4.docx

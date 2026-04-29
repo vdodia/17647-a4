@@ -18,8 +18,8 @@ The Kafka config in your application should use all three brokers (see the A3 de
 
 Recommendation service: We have deployed the recommendation service for you to use, but you should also deploy it locally for testing prior to AWS deployment. (You can pull from Docker Hub; more info in the A3 writeup.) Here are the options you have for the service:
 Location 	API Documentation 	Delay 	Purpose
-http://34.195.107.7 	http://34.195.107.7/swagger-ui.html 	Zero 	Testing locally or on AWS (prior to submission)
-http://54.221.160.63 	http://54.221.160.63/swagger-ui.html 	Varies 	Submitting on Gradescope
+http://98.88.99.206 	http://98.88.99.206/swagger-ui.html 	Zero 	Testing locally or on AWS (prior to submission)
+http://34.195.107.7 	http://34.195.107.7/swagger-ui.html 	Varies 	Submitting on Gradescope
 http://localhost:<port> 	http://localhost:<port>/swagger-ui.html 	As you choose 	Testing locally prior to AWS deployment
 
 When you are ready to submit to Gradescope, please make sure you configure your Book service to use the second IP address.

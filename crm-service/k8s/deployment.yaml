@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: crm-service
-          image: 215828453142.dkr.ecr.us-east-1.amazonaws.com/bookstore/crm-service:latest
+          image: 780159647368.dkr.ecr.us-east-1.amazonaws.com/bookstore/crm-service:latest
           imagePullPolicy: Always
           env:
             - name: KAFKA_BROKERS

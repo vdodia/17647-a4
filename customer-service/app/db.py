@@ -51,7 +51,7 @@ def init_db():
         cursor.execute(f"USE {config.DB_NAME}")
         
         # Apply schema definition within the lock
-        init_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'sql', 'init.sql')
+        init_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sql", "init.sql")
         if os.path.exists(init_file_path):
             with open(init_file_path, 'r') as f:
                 sql_script = f.read()

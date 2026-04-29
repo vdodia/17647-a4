@@ -1,27 +1,72 @@
-import os
-import json
 import base64
-import time
+import json
 import logging
+import os
+import time
+
 import requests
-from flask import Flask, request, Response, jsonify
+from flask import Flask, Response, jsonify, request
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _book_service_url(path: str, method: str) -> str:
+    cmd = os.environ.get("URL_BOOK_COMMAND_SERVICE", "").rstrip("/")
+    qry = os.environ.get("URL_BOOK_QUERY_SERVICE", "").rstrip("/")
+    legacy = os.environ.get("URL_BOOK_SERVICE", "").rstrip("/")
+    if (not cmd or not qry) and legacy:
+        return f"{legacy}/{path}" if path else legacy
+    if not cmd or not qry:
+        return "http://localhost:3000"
+    if method == "POST" and path == "books":
+        return f"{cmd}/cmd/books"
+    if method == "PUT" and path.startswith("books/"):
+        rest = path[len("books/") :]
+        if "/" in rest or not rest:
+            return f"{qry}/{path}"
+        return f"{cmd}/cmd/books/{rest}"
+    return f"{qry}/{path}" if path else qry
+
+
+def _customer_url(path: str) -> str:
+    base = os.environ.get("URL_CUSTOMER_SERVICE", "") or os.environ.get(
+        "URL_BASE_BACKEND_SERVICES", ""
+    )
+    base = (base or "http://localhost:3000").rstrip("/")
+    if not path:
+        return base
+    return f"{base}/{path}"
+
+
+def _default_backend_url(path: str) -> str:
+    base = (os.environ.get("URL_BASE_BACKEND_SERVICES") or "http://localhost:3000").rstrip(
+        "/"
+    )
+    if not path:
+        return base
+    return f"{base}/{path}"
+
+
+def _resolve_upstream_url(path: str, method: str) -> str:
+    if path.startswith("customers"):
+        return _customer_url(path)
+    if path == "books" or path.startswith("books"):
+        return _book_service_url(path, method)
+    return _default_backend_url(path)
+
+
+def _apply_nonfiction_to_book_payload(data) -> None:
+    if isinstance(data, dict) and data.get("genre") == "non-fiction":
+        data["genre"] = 3
+    elif isinstance(data, list):
+        for b in data:
+            if isinstance(b, dict) and b.get("genre") == "non-fiction":
+                b["genre"] = 3
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
-
-    BACKEND_URL = os.environ.get("URL_BASE_BACKEND_SERVICES", "")
-    CUSTOMER_SERVICE_URL = os.environ.get("URL_CUSTOMER_SERVICE", "")
-    BOOK_SERVICE_URL = os.environ.get("URL_BOOK_SERVICE", "")
-
-    def _get_backend_url(path: str) -> str:
-        if path.startswith("customers"):
-            return CUSTOMER_SERVICE_URL or BACKEND_URL or "http://localhost:3000"
-        if path.startswith("books"):
-            return BOOK_SERVICE_URL or BACKEND_URL or "http://localhost:3000"
-        return BACKEND_URL or "http://localhost:3000"
 
     def validate_jwt(auth_header):
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -31,46 +76,47 @@ def create_app() -> Flask:
             parts = token.split(".")
             if len(parts) != 3:
                 return False, "Invalid JWT format"
-            
             payload_b64 = parts[1]
             payload_b64 += "=" * ((4 - len(payload_b64) % 4) % 4)
             payload_json = base64.urlsafe_b64decode(payload_b64).decode("utf-8")
             payload = json.loads(payload_json)
-            
-            valid_subs = ["starlord", "gamora", "drax", "rocket", "groot"]
-            if payload.get("sub") not in valid_subs:
+            if payload.get("sub") not in [
+                "starlord",
+                "gamora",
+                "drax",
+                "rocket",
+                "groot",
+            ]:
                 return False, "Invalid sub"
-                
             exp = payload.get("exp")
             if not exp or int(time.time()) >= int(exp):
                 return False, "Token expired"
-                
             if payload.get("iss") != "cmu.edu":
                 return False, "Invalid iss"
-                
             return True, None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             return False, str(e)
 
-    @app.route('/status')
+    @app.get("/status")
     def status():
         return {"status": "ok", "service": "mobile-bff"}, 200
 
-    @app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
-    @app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
-    def proxy(path):
+    @app.route("/", defaults={"path": ""}, methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+    @app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+    def proxy(path: str):
         if not request.headers.get("X-Client-Type"):
             return jsonify({"error": "Missing X-Client-Type header"}), 400
+        ok, err = validate_jwt(request.headers.get("Authorization"))
+        if not ok:
+            return jsonify({"error": err}), 401
 
-        auth_header = request.headers.get("Authorization")
-        is_valid, err_msg = validate_jwt(auth_header)
-        if not is_valid:
-            return jsonify({"error": err_msg}), 401
+        route_path = path
+        if not route_path and request.path not in ("/", ""):
+            route_path = request.path.lstrip("/")
 
-        backend = _get_backend_url(path)
-        url = f"{backend}/{path}"
-        headers = {key: value for key, value in request.headers if key.lower() != 'host'}
-        
+        url = _resolve_upstream_url(route_path, request.method)
+
+        headers = {k: v for k, v in request.headers if k.lower() != "host"}
         try:
             resp = requests.request(
                 method=request.method,
@@ -79,49 +125,51 @@ def create_app() -> Flask:
                 data=request.get_data(),
                 params=request.args,
                 allow_redirects=False,
-                timeout=10
+                timeout=30,
             )
-            
-            content = resp.content
-            
-            if request.method == "GET" and resp.status_code == 200:
-                if request.path.startswith("/books/isbn/") or request.path.startswith("/books/"):
-                    try:
-                        data = resp.json()
-                        if isinstance(data, dict) and data.get("genre") == "non-fiction":
-                            data["genre"] = 3
-                        elif isinstance(data, list):
-                            for b in data:
-                                if b.get("genre") == "non-fiction":
-                                    b["genre"] = 3
-                        content = json.dumps(data).encode("utf-8")
-                    except ValueError:
-                        pass
-                
-                elif request.path.startswith("/customers"):
-                    try:
-                        data = resp.json()
-                        keys_to_remove = ["address", "address2", "city", "state", "zipcode"]
-                        
-                        if isinstance(data, list):
-                            for customer in data:
-                                for key in keys_to_remove:
-                                    customer.pop(key, None)
-                        elif isinstance(data, dict):
-                            for key in keys_to_remove:
-                                data.pop(key, None)
-                        content = json.dumps(data).encode("utf-8")
-                    except ValueError:
-                        pass
-
-            excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-            resp_headers = [(k, v) for k, v in resp.headers.items() if k.lower() not in excluded_headers]
-            return Response(content, resp.status_code, resp_headers)
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error proxying request: {e}")
+            logger.error("Error proxying request: %s", e)
             return jsonify({"error": "Backend service unavailable"}), 502
 
+        content = resp.content
+        if request.method == "GET" and resp.status_code == 200:
+            p = request.path
+            if p == "/books" and "keyword" in request.args:
+                try:
+                    data = json.loads(content.decode("utf-8"))
+                    _apply_nonfiction_to_book_payload(data)
+                    content = json.dumps(data).encode("utf-8")
+                except (ValueError, OSError, UnicodeError):
+                    pass
+            if p.startswith("/books/isbn/") or (p.startswith("/books/") and p != "/books"):
+                if "/related-books" not in p and "keyword" not in (request.args or {}):
+                    try:
+                        data = json.loads(content.decode("utf-8"))
+                        _apply_nonfiction_to_book_payload(data)
+                        content = json.dumps(data).encode("utf-8")
+                    except (ValueError, OSError, UnicodeError):
+                        pass
+            if p.startswith("/customers"):
+                try:
+                    data = json.loads(content.decode("utf-8"))
+                    keys = ["address", "address2", "city", "state", "zipcode"]
+                    if isinstance(data, list):
+                        for c in data:
+                            for k in keys:
+                                c.pop(k, None)
+                    elif isinstance(data, dict):
+                        for k in keys:
+                            data.pop(k, None)
+                    content = json.dumps(data).encode("utf-8")
+                except (ValueError, OSError, UnicodeError):
+                    pass
+
+        excluded = ["content-encoding", "content-length", "transfer-encoding", "connection"]
+        h = [(k, v) for k, v in resp.headers.items() if k.lower() not in excluded]
+        return Response(content, resp.status_code, h)
+
     return app
+
 
 app = create_app()
 

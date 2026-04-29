@@ -17,15 +17,17 @@ spec:
     spec:
       containers:
         - name: mobile-bff
-          image: 215828453142.dkr.ecr.us-east-1.amazonaws.com/bookstore/mobile-bff:latest
+          image: 780159647368.dkr.ecr.us-east-1.amazonaws.com/bookstore/mobile-bff:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80
           env:
             - name: URL_CUSTOMER_SERVICE
               value: "http://customer-service.bookstore-ns.svc.cluster.local:3000"
-            - name: URL_BOOK_SERVICE
-              value: "http://book-service.bookstore-ns.svc.cluster.local:3000"
+            - name: URL_BOOK_COMMAND_SERVICE
+              value: "http://book-command-service.bookstore-ns.svc.cluster.local:3000"
+            - name: URL_BOOK_QUERY_SERVICE
+              value: "http://book-query-service.bookstore-ns.svc.cluster.local:3000"
           livenessProbe:
             httpGet:
               path: /status
