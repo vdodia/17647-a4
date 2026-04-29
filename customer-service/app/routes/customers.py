@@ -102,8 +102,10 @@ def add_customer():
         "zipcode":  data["zipcode"],
     }
 
-    publish_customer_event(response_body)
-
+    try:
+        publish_customer_event(response_body)
+    except Exception:  # noqa: BLE001
+        logger.exception("Kafka publish failed after customer insert; response still 201")
     location = request.host_url.rstrip("/") + f"/customers/{new_id}"
     response = jsonify(response_body)
     response.status_code = 201

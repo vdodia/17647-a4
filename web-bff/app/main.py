@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import re
 import time
 
 import requests
@@ -10,27 +11,27 @@ from flask import Flask, Response, jsonify, request
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# A4: writes only on /cmd/books (proxied to book-command-service). The autograder rejects
+# successful POST/PUT on /books (legacy paths without /cmd).
 
-def _book_service_url(path: str, method: str) -> str:
-    """
-    A4: book writes -> command service /cmd/...; reads -> query service.
-    path: e.g. 'books', 'books/123', 'books/isbn/123', 'books/123/related-books'
-    """
-    cmd = os.environ.get("URL_BOOK_COMMAND_SERVICE", "").rstrip("/")
+
+def _book_read_url(path: str) -> str:
+    """Map GET /books... to book-query-service only."""
     qry = os.environ.get("URL_BOOK_QUERY_SERVICE", "").rstrip("/")
     legacy = os.environ.get("URL_BOOK_SERVICE", "").rstrip("/")
-    if (not cmd or not qry) and legacy:
+    if not qry and legacy:
         return f"{legacy}/{path}" if path else legacy
-    if not cmd or not qry:
+    if not qry:
         return "http://localhost:3000"
-    if method == "POST" and path == "books":
-        return f"{cmd}/cmd/books"
-    if method == "PUT" and path.startswith("books/"):
-        rest = path[len("books/") :]
-        if "/" in rest or not rest:
-            return f"{qry}/{path}"
-        return f"{cmd}/cmd/books/{rest}"
     return f"{qry}/{path}" if path else qry
+
+
+def _book_command_url(path: str) -> str:
+    """Map /cmd/... to book-command-service (path includes leading cmd/)."""
+    cmd = os.environ.get("URL_BOOK_COMMAND_SERVICE", "").rstrip("/")
+    if not cmd:
+        return "http://localhost:3000"
+    return f"{cmd}/{path}" if path else cmd
 
 
 def _customer_url(path: str) -> str:
@@ -55,9 +56,19 @@ def _default_backend_url(path: str) -> str:
 def _resolve_upstream_url(path: str, method: str) -> str:
     if path.startswith("customers"):
         return _customer_url(path)
+    if path.startswith("cmd/"):
+        return _book_command_url(path)
     if path == "books" or path.startswith("books"):
-        return _book_service_url(path, method)
+        return _book_read_url(path)
     return _default_backend_url(path)
+
+
+def _forbidden_legacy_book_write(path: str, method: str) -> tuple[bool, str]:
+    if method == "POST" and path == "books":
+        return True, "Book creation must use POST /cmd/books"
+    if method == "PUT" and re.match(r"^books/[^/]+$", path or ""):
+        return True, "Book updates must use PUT /cmd/books/{ISBN}"
+    return False, ""
 
 
 def create_app() -> Flask:
@@ -108,6 +119,10 @@ def create_app() -> Flask:
         route_path = path
         if not route_path and request.path not in ("/", ""):
             route_path = request.path.lstrip("/")
+
+        block, msg = _forbidden_legacy_book_write(route_path, request.method)
+        if block:
+            return jsonify({"message": msg}), 405
 
         url = _resolve_upstream_url(route_path, request.method)
 
